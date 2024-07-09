@@ -9,6 +9,7 @@
     import CirclePlus from "lucide-svelte/icons/circle-plus";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Switch } from "$lib/components/ui/switch";
+	import { FileText } from 'lucide-svelte';
 
     // Client Information variables
     let clientName = '';
@@ -22,7 +23,7 @@
     let yourCompany = '';
     
     let items = [{ description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
-    let errors = { clientName: false, clientStreetAddress: false, clientCompany: false };
+    let errors = { clientName: false, clientStreetAddress: false, clientCompany: false, clientCityStatePostalCode: false, clientCountry: false };
 
     const addItem = () => {
         items = [...items, { description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
@@ -36,6 +37,8 @@
         errors.clientName = clientName.trim() === '';
         errors.clientStreetAddress = clientStreetAddress.trim() === '';
         errors.clientCompany = clientCompany.trim() === '';
+        errors.clientCityStatePostalCode = clientCityStatePostalCode.trim() === '';
+        errors.clientCountry = clientCountry.trim() === '';
     };
 
     // State variable to hold the selected value
@@ -609,15 +612,33 @@
             </div>
 
             <!-- Client City, Province, Postal Code Line -->
+            <div class="grid gap-3">
+                <Label for="client-city-state-postalcode">
+                    Client City, State, and Postal Code
+                    {#if errors.clientCityStatePostalCode}
+                        <span class="text-xs text-red-500">Client city, state, and postal code are required.</span>
+                    {/if}
+                </Label>
+                <Input type="text" bind:value={clientCityStatePostalCode} id="client-city-state-postalcode" placeholder="Ex. New York City, NY 000000" aria-placeholder="Enter Client&apos;s city name, state, and postal code" />
+            </div>
 
             <!-- Client Country -->
+            <div class="grid gap-3">
+                <Label for="client-country">
+                    Client Country
+                    {#if errors.clientCountry}
+                        <span class="text-xs text-red-500">Client Country is required.</span>
+                    {/if}
+                </Label>
+                <Input type="text" bind:value={clientCountry} id="client-country" placeholder="Ex. United States of America" aria-placeholder="Enter Client&apos;s Country" />
+            </div>
         </fieldset>
 
         <!-- Invoice Details -->
         <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
             <legend class="-ml-1 px-1 text-sm font-medium"> Item Details </legend>
 
-            <p class="inline-block sm:hidden text-xs text-muted-foreground">Swipe Left to Edit Item Details →</p>
+            <p class="inline-block sm:hidden text-xs text-muted-foreground">Swipe to Edit Row Details →</p>
 
             <!-- Item Description -->
 
@@ -691,6 +712,10 @@
     </form>
 
     <button on:click={generatePDF}>Generate PDF</button>
+    <Button>
+        <FileText class="mr-2 h-4 w-4" />
+        Generate Invoice PDF
+    </Button>
 
     <Toaster  />
 
