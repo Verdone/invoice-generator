@@ -51,7 +51,7 @@
 				<p class="text-center text-sm leading-loose text-muted-foreground">
 					If you like this website, check out the repository on 
 					<a href="https://github.com/huntabyte/shadcn-svelte" target="_blank" rel="noreferrer" class="font-medium underline underline-offset-4">GitHub</a>
-					and be sure to leave a star! See the 
+					and leave feedback on what to add next! See the 
 					<a href="/licensing" rel="noreferrer" class="font-medium underline underline-offset-4">Licensing</a>
 					 page for the full list of attributions.
 				</p>

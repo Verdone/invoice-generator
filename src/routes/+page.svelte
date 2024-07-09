@@ -10,35 +10,91 @@
     import { Button } from "$lib/components/ui/button/index.js";
     import { Switch } from "$lib/components/ui/switch";
 	import { FileText } from 'lucide-svelte';
+    import CalendarIcon from "svelte-radix/Calendar.svelte";
+    import {
+        DateFormatter,
+        type DateValue,
+        getLocalTimeZone,
+        today
+    } from "@internationalized/date";
+    import { cn } from "$lib/utils.js";
+    import { Calendar } from "$lib/components/ui/calendar/index.js";
+    import * as Popover from "$lib/components/ui/popover/index.js";
+    import * as Select from "$lib/components/ui/select/index.js";
+    
+    const df = new DateFormatter("en-US", {
+        dateStyle: "long"
+    });
 
-    // Client Information variables
+    const items = [
+        { value: 0, label: "Today" },
+        { value: 1, label: "Tomorrow" },
+        { value: 3, label: "In 3 days" },
+        { value: 7, label: "In a week" }
+    ];
+
+    // Invoice Information instance variables
+    let invoiceNumber = '';
+    let invoiceDateIssued: DateValue | undefined = undefined;
+    let invoiceDueDate: DateValue | undefined = undefined;
+    let invoiceStatus: '';
+
+    // Client Information instance variables
     let clientName = '';
     let clientCompany = '';
     let clientStreetAddress = '';
     let clientCityStatePostalCode = '';
     let clientCountry = '';
 
-    // Your Information variables
+    // Your Information instance variables
     let yourName = '';
     let yourCompany = '';
+    let yourStreetAddress = '';
+    let yourCityStatePostalCode = '';
+    let yourCountry = '';
     
-    let items = [{ description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
-    let errors = { clientName: false, clientStreetAddress: false, clientCompany: false, clientCityStatePostalCode: false, clientCountry: false };
+    // Invoice Items instance variables
+    let invoiceItems = [{ description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
+    
+    // errors JSON variable for really, really rudimentary validation
+    let errors = {
+        yourName: false,
+        yourStreetAddress: false,
+        yourCompany: false,
+        yourCityStatePostalCode: false,
+        yourCountry: false, 
+        clientName: false,
+        clientStreetAddress: false,
+        clientCompany: false,
+        clientCityStatePostalCode: false,
+        clientCountry: false, 
+    };
 
     const addItem = () => {
-        items = [...items, { description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
+        invoiceItems = [...invoiceItems, { description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
     };
 
     // const removeItem = (index) => {
-    //     items.splice(index, 1);
+    //     invoiceItems.splice(index, 1);
     // };
 
     const validate = () => {
+        // Validate inputs for your information
+        errors.yourName = yourName.trim() === '';
+        errors.yourStreetAddress = yourStreetAddress.trim() === '';
+        errors.yourCompany = yourCompany.trim() === '';
+        errors.yourCityStatePostalCode = yourCityStatePostalCode.trim() === '';
+        errors.yourCountry = yourCountry.trim() === '';
+
+        // Validate inputs for client information
         errors.clientName = clientName.trim() === '';
         errors.clientStreetAddress = clientStreetAddress.trim() === '';
         errors.clientCompany = clientCompany.trim() === '';
         errors.clientCityStatePostalCode = clientCityStatePostalCode.trim() === '';
         errors.clientCountry = clientCountry.trim() === '';
+
+        // Validate inputs for notes and terms/conditions
+
     };
 
     // State variable to hold the selected value
@@ -185,7 +241,7 @@
                     {
                         columns: [
                             {
-                                text: `Your Name \n Your Company Inc.`,
+                                text: `${yourName} \n ${yourCompany}`,
                                 bold: true,
                                 color: '#333333',
                                 alignment: 'left',
@@ -217,7 +273,7 @@
                     {
                         columns: [
                             {
-                                text: '9999 Street name 1A \n New-York City NY 00000 \n   USA',
+                                text: `${yourStreetAddress} \n ${yourCityStatePostalCode} \n   ${yourCountry}`,
                                 style: 'invoiceBillingAddress',
                             },
                             {
@@ -324,7 +380,7 @@
                                         textTransform: 'uppercase',
                                     },
                                 ],
-                                ...items.map(item => [
+                                ...invoiceItems.map(item => [
                                     {
                                         text: item.description,
                                         border: [false, false, false, true],
@@ -418,7 +474,7 @@
                                     },
                                     {
                                         border: [false, true, false, true],
-                                        text: `$${items.reduce(
+                                        text: `$${invoiceItems.reduce(
                                                 (acc, item) => acc + item.quantity * item.price,
                                                 0
                                             ).toFixed(2)}`,
@@ -435,7 +491,7 @@
                                         margin: [0, 5, 0, 5],
                                     },
                                     {
-                                        text: `$${items
+                                        text: `$${invoiceItems
                                                 .reduce(
                                                     (acc, item) =>
                                                         acc + item.quantity * item.price * 0.09975,
@@ -456,7 +512,7 @@
                                         margin: [0, 5, 0, 5],
                                     },
                                     {
-                                        text: `$${items
+                                        text: `$${invoiceItems
                                                 .reduce(
                                                     (acc, item) =>
                                                         acc + item.quantity * item.price * 0.05,
@@ -480,7 +536,7 @@
                                     },
                                     {
                                         text: `CAD $${(
-                                                    items.reduce(
+                                                    invoiceItems.reduce(
                                                         (acc, item) =>
                                                             acc + item.quantity * item.price,
                                                         0
@@ -558,98 +614,262 @@
     <!-- Form for Custom Invoice Parameters -->
     <form class="grid w-full items-start gap-6 overflow-auto p-4 pt-0">
 
-        <!-- Company Information -->
-        <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
-            <legend class="-ml-1 px-1 text-sm font-medium"> Company&apos;s Information </legend>
+        <!-- Document Information and Image Upload -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Document Information -->
+            <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
+                <legend class="-ml-1 px-1 text-sm font-medium"> Basic Information </legend>
 
-            <!-- Personal Name -->
+                <!-- Invoice Number -->
+                <div class="grid gap-3">
+                    <Label for="your-name">
+                        Invoice No.
+                        {#if errors.yourName}
+                            <span class="text-xs text-red-500">Your name is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourName} id="your-name" placeholder="Enter Your Full Name" aria-placeholder="Enter Your Full Name" />
+                </div>
 
-            <!-- Company Name -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Date Issued -->
+                    <div class="grid gap-3">
+                        <Label for="date-issued">
+                            Date Issued
+                        </Label>
+                        
+                        <Popover.Root openFocus>
+                            <Popover.Trigger asChild let:builder>
+                            <Button
+                                variant="outline"
+                                class={cn(
+                                "w-[240px] justify-start text-left font-normal",
+                                !invoiceDateIssued && "text-muted-foreground"
+                                )}
+                                builders={[builder]}
+                            >
+                                <CalendarIcon class="mr-2 h-4 w-4" />
+                                {invoiceDateIssued ? df.format(invoiceDateIssued.toDate(getLocalTimeZone())) : "Pick a date"}
+                            </Button>
+                            </Popover.Trigger>
+                            <Popover.Content class="flex w-auto flex-col space-y-2 p-2">
+                            <Select.Root
+                                {items}
+                                onSelectedChange={(v) => {
+                                if (!v) return;
+                                invoiceDateIssued = today(getLocalTimeZone()).add({ days: v.value });
+                                }}
+                            >
+                                <Select.Trigger>
+                                <Select.Value placeholder="Select" />
+                                </Select.Trigger>
+                                <Select.Content>
+                                {#each items as item}
+                                    <Select.Item value={item.value}>{item.label}</Select.Item>
+                                {/each}
+                                </Select.Content>
+                            </Select.Root>
+                            <div class="rounded-md border">
+                                <Calendar bind:invoiceDateIssued />
+                            </div>
+                            </Popover.Content>
+                        </Popover.Root>
+                    </div>
 
-            <!-- Company Address Line -->
+                    <!-- Due Date -->
+                    <div class="grid gap-3">
+                        <Label for="due-date">
+                            Due Date
+                        </Label>
+                        
+                        <Popover.Root openFocus>
+                            <Popover.Trigger asChild let:builder>
+                            <Button
+                                variant="outline"
+                                class={cn(
+                                "w-[240px] justify-start text-left font-normal",
+                                !invoiceDueDate && "text-muted-foreground"
+                                )}
+                                builders={[builder]}
+                            >
+                                <CalendarIcon class="mr-2 h-4 w-4" />
+                                {invoiceDueDate ? df.format(invoiceDueDate.toDate(getLocalTimeZone())) : "Pick a date"}
+                            </Button>
+                            </Popover.Trigger>
+                            <Popover.Content class="flex w-auto flex-col space-y-2 p-2">
+                            <Select.Root
+                                {items}
+                                onSelectedChange={(v) => {
+                                if (!v) return;
+                                invoiceDueDate = today(getLocalTimeZone()).add({ days: v.value });
+                                }}
+                            >
+                                <Select.Trigger>
+                                <Select.Value placeholder="Select" />
+                                </Select.Trigger>
+                                <Select.Content>
+                                {#each items as item}
+                                    <Select.Item value={item.value}>{item.label}</Select.Item>
+                                {/each}
+                                </Select.Content>
+                            </Select.Root>
+                            <div class="rounded-md border">
+                                <Calendar bind:invoiceDueDate />
+                            </div>
+                            </Popover.Content>
+                        </Popover.Root>
+                    </div>
+                </div>
 
-            <!-- Company City, Province, Postal Code Line -->
+                <!-- Invoice Status -->
+                <div class="grid gap-3">
+                    <Label for="your-city-state-postalcode">
+                        Invoice Status (Optional)
+                        {#if errors.yourCityStatePostalCode}
+                            <span class="text-xs text-red-500">&nbsp; Your city, state, and postal code are required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourCityStatePostalCode} id="your-city-state-postalcode" placeholder="e.g. Paid / Pending / Overdue" aria-placeholder="Enter your Invoice Status (Paid, Pending, Overdue)..." />
+                </div>
+            </fieldset>
 
-            <!-- Company Country -->
+            <!-- Company Image Upload -->
+            <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
+                <legend class="-ml-1 px-1 text-sm font-medium"> Your Company&apos;s Logo </legend>
 
-        </fieldset>
+            </fieldset>
+        </div>
 
-        <!-- Client Information -->
-        <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
-            <legend class="-ml-1 px-1 text-sm font-medium mb-2"> Client&apos;s Information </legend>
+        <!-- Personal/Client Information -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Personal Company Information -->
+            <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
+                <legend class="-ml-1 px-1 text-sm font-medium"> Your Company&apos;s Information </legend>
 
-            <!-- Client Name -->
-            <div class="grid gap-3">
-                <Label for="client-name">
-                    Client Name
-                    {#if errors.clientName}
-                        <span class="text-xs text-red-500">Client name is required.</span>
-                    {/if}
-                </Label>
-                <Input type="text" bind:value={clientName} id="client-name" placeholder="Enter Client&apos;s Full Name" aria-placeholder="Enter Client&apos;s Full Name" />
-            </div>
+                <!-- Personal Name -->
+                <div class="grid gap-3">
+                    <Label for="your-name">
+                        Your Name
+                        {#if errors.yourName}
+                            <span class="text-xs text-red-500">Your name is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourName} id="your-name" placeholder="Enter Your Full Name" aria-placeholder="Enter Your Full Name" />
+                </div>
 
-            <!-- Client Name -->
-            <div class="grid gap-3">
-                <Label for="client-company">
-                    Client Company
-                    {#if errors.clientCompany}
-                        <span class="text-xs text-red-500">Client company is required.</span>
-                    {/if}
-                </Label>
-                <Input type="text" bind:value={clientCompany} id="client-company" placeholder="Ex. Acme Inc." aria-placeholder="Enter Client&apos;s Company Name" />
-            </div>
+                <!-- Your Company Name -->
+                <div class="grid gap-3">
+                    <Label for="your-name">
+                        Your Company&apos;s Name
+                        {#if errors.yourName}
+                            <span class="text-xs text-red-500">Your name is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourName} id="your-name" placeholder="e.g. Acme Inc." aria-placeholder="Enter Your Full Name" />
+                </div>
 
-            <!-- Client Street Address -->
-            <div class="grid gap-3">
-                <Label for="client-address">
-                    Client Address
-                    {#if errors.clientStreetAddress}
-                        <span class="text-xs text-red-500">&nbsp; Client address is required.</span>
-                    {/if}
-                </Label>
-                <Input type="text" bind:value={clientStreetAddress} id="client-address" placeholder="Ex. 9999 Street name 1A" aria-placeholder="Enter Client Address number, street name, and apartment number." />
-            </div>
+                <!-- Your Address Line -->
+                <div class="grid gap-3">
+                    <Label for="your-address">
+                        Your Address
+                        {#if errors.yourStreetAddress}
+                            <span class="text-xs text-red-500">&nbsp; Your address is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourStreetAddress} id="your-address" placeholder="e.g. 9999 Street name 1A" aria-placeholder="Enter your Address number, street name, and apartment number." />
+                </div>
 
-            <!-- Client City, Province, Postal Code Line -->
-            <div class="grid gap-3">
-                <Label for="client-city-state-postalcode">
-                    Client City, State, and Postal Code
-                    {#if errors.clientCityStatePostalCode}
-                        <span class="text-xs text-red-500">Client city, state, and postal code are required.</span>
-                    {/if}
-                </Label>
-                <Input type="text" bind:value={clientCityStatePostalCode} id="client-city-state-postalcode" placeholder="Ex. New York City, NY 000000" aria-placeholder="Enter Client&apos;s city name, state, and postal code" />
-            </div>
+                <!-- Your City, Province, Postal Code Line -->
+                <div class="grid gap-3">
+                    <Label for="your-city-state-postalcode">
+                        Your City, State, Postal Code
+                        {#if errors.yourCityStatePostalCode}
+                            <span class="text-xs text-red-500">&nbsp; Your city, state, and postal code are required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourCityStatePostalCode} id="your-city-state-postalcode" placeholder="e.g. New York City, NY 00000" aria-placeholder="Enter your City, State, and Postal Code." />
+                </div>
 
-            <!-- Client Country -->
-            <div class="grid gap-3">
-                <Label for="client-country">
-                    Client Country
-                    {#if errors.clientCountry}
-                        <span class="text-xs text-red-500">Client Country is required.</span>
-                    {/if}
-                </Label>
-                <Input type="text" bind:value={clientCountry} id="client-country" placeholder="Ex. United States of America" aria-placeholder="Enter Client&apos;s Country" />
-            </div>
-        </fieldset>
+                <!-- Your Country -->
+                <div class="grid gap-3">
+                    <Label for="your-country">
+                        Your Country
+                        {#if errors.yourCountry}
+                            <span class="text-xs text-red-500">&nbsp; Your Country is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={yourCountry} id="your-country" placeholder="e.g. United States of America" aria-placeholder="Enter Your Country." />
+                </div>
+            </fieldset>
 
-        <!-- Invoice Details -->
+            <!-- Client Information -->
+            <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
+                <legend class="-ml-1 px-1 text-sm font-medium mb-2"> Your Client&apos;s Information </legend>
+
+                <!-- Client Name -->
+                <div class="grid gap-3">
+                    <Label for="client-name">
+                        Client Name
+                        {#if errors.clientName}
+                            <span class="text-xs text-red-500">Client name is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={clientName} id="client-name" placeholder="Enter Client&apos;s Full Name" aria-placeholder="Enter Client&apos;s Full Name" />
+                </div>
+
+                <!-- Client Company Name -->
+                <div class="grid gap-3">
+                    <Label for="client-company">
+                        Client Company
+                        {#if errors.clientCompany}
+                            <span class="text-xs text-red-500">Client company is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={clientCompany} id="client-company" placeholder="e.g. Acme Inc." aria-placeholder="Enter Client&apos;s Company Name" />
+                </div>
+
+                <!-- Client Street Address -->
+                <div class="grid gap-3">
+                    <Label for="client-address">
+                        Client Address
+                        {#if errors.clientStreetAddress}
+                            <span class="text-xs text-red-500">&nbsp; Client address is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={clientStreetAddress} id="client-address" placeholder="e.g. 9999 Street name 1A" aria-placeholder="Enter Client Address number, street name, and apartment number." />
+                </div>
+
+                <!-- Client City, Province, Postal Code Line -->
+                <div class="grid gap-3">
+                    <Label for="client-city-state-postalcode">
+                        Client City, State, Postal Code
+                        {#if errors.clientCityStatePostalCode}
+                            <span class="text-xs text-red-500">&nbsp; Client city, state, and postal code are required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={clientCityStatePostalCode} id="client-city-state-postalcode" placeholder="e.g. New York City, NY 00000" aria-placeholder="Enter Client's City, State, and Postal Code." />
+                </div>
+
+                <!-- Client Country -->
+                <div class="grid gap-3">
+                    <Label for="client-country">
+                        Client Country
+                        {#if errors.clientCountry}
+                            <span class="text-xs text-red-500">&nbsp; Client Country is required.</span>
+                        {/if}
+                    </Label>
+                    <Input required aria-required type="text" bind:value={clientCountry} id="client-country" placeholder="e.g. United States of America" aria-placeholder="Enter Client Country." />
+                </div>
+            </fieldset>
+        </div>
+
+        <!-- Item Details -->
         <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
             <legend class="-ml-1 px-1 text-sm font-medium"> Item Details </legend>
 
-            <p class="inline-block sm:hidden text-xs text-muted-foreground">Swipe to Edit Row Details →</p>
+            <p class="inline-block sm:hidden text-xs text-muted-foreground">Swipe Left to Edit Item Details →</p>
 
-            <!-- Item Description -->
-
-            <!-- Item Quantity -->
-
-            <!-- Item Price -->
-
-            <!-- Item Select QST Option -->
-
-            <!-- Item Select GST Option -->
-
+            <!-- Table with rows for Item Description, Quantity, Price, Select QST Option, and Select GST Option -->
             <Table.Root>
                 <Table.Header>
                   <Table.Row>
@@ -661,18 +881,18 @@
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                    {#each items as item, index}
+                    {#each invoiceItems as item, index}
                     <Table.Row>
                         <Table.Cell class="font-semibold">
-                            <Input type="text" bind:value={item.description} placeholder="Enter Item Description (max. 150 characters)" aria-placeholder="Enter Item Description" maxlength="150" />
+                            <Input required aria-required type="text" bind:value={item.description} placeholder="Enter Item Description (max. 150 characters)" aria-placeholder="Enter Item Description" maxlength="150" />
                         </Table.Cell>
                         <Table.Cell>
                         <Label for="stock-1" class="sr-only">Stock</Label>
-                        <Input id="stock-1" type="number" value="1" step="1" />
+                        <Input required aria-required id="stock-1" type="number" value="1" step="1" />
                         </Table.Cell>
                         <Table.Cell>
                         <Label for="price-1" class="sr-only">Price</Label>
-                        <Input id="price-1" type="number" value="0.00" step="0.01" />
+                        <Input required aria-required id="price-1" type="number" value="0.00" step="0.01" />
                         </Table.Cell>
                         <Table.Cell>
                             <div class="flex items-center justify-center">
@@ -691,12 +911,12 @@
                     </Table.Row>
                     {/each}
                 </Table.Body>
-              </Table.Root>
+            </Table.Root>
 
-              <Button size="sm" variant="ghost" class="gap-1" on:click={addItem}>
+            <Button size="sm" variant="ghost" class="gap-1" on:click={addItem}>
                 <CirclePlus class="h-3.5 w-3.5" />
                 Add an Item
-              </Button>
+            </Button>
         </fieldset>
 
         <!-- Additional Details -->
@@ -711,10 +931,9 @@
         
     </form>
 
-    <button on:click={generatePDF}>Generate PDF</button>
-    <Button>
+    <Button on:click={generatePDF}>
         <FileText class="mr-2 h-4 w-4" />
-        Generate Invoice PDF
+        Generate Document
     </Button>
 
     <Toaster  />
