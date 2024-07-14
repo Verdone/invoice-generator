@@ -7,37 +7,55 @@
     import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import CirclePlus from "lucide-svelte/icons/circle-plus";
+    import CircleMinus from "lucide-svelte/icons/circle-minus";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Switch } from "$lib/components/ui/switch";
-	import { FileText } from 'lucide-svelte';
-    import CalendarIcon from "svelte-radix/Calendar.svelte";
-    import {
-        DateFormatter,
-        type DateValue,
-        getLocalTimeZone,
-        today
-    } from "@internationalized/date";
-    import { cn } from "$lib/utils.js";
-    import { Calendar } from "$lib/components/ui/calendar/index.js";
-    import * as Popover from "$lib/components/ui/popover/index.js";
-    import * as Select from "$lib/components/ui/select/index.js";
-    
+	import { Textarea } from "$lib/components/ui/textarea";
+    import { FileText } from 'lucide-svelte';
+    import { DateFormatter, today, getLocalTimeZone } from "@internationalized/date";
+    import { ImageUp } from 'lucide-svelte';
+
+    const removeItem = (index) => {
+        if (invoiceItems.length <= 1) return;
+        invoiceItems = invoiceItems.filter((_, i) => i !== index);
+    };
+
+
     const df = new DateFormatter("en-US", {
         dateStyle: "long"
     });
 
-    const items = [
-        { value: 0, label: "Today" },
-        { value: 1, label: "Tomorrow" },
-        { value: 3, label: "In 3 days" },
-        { value: 7, label: "In a week" }
-    ];
-
     // Invoice Information instance variables
     let invoiceNumber = '';
-    let invoiceDateIssued: DateValue | undefined = undefined;
-    let invoiceDueDate: DateValue | undefined = undefined;
-    let invoiceStatus: '';
+    let invoiceDateIssued = today(getLocalTimeZone());
+    let invoiceDueDate = today(getLocalTimeZone());
+    let invoiceStatus = '';
+    function getInvoiceStatusColor(status) {
+        // Convert the status to lowercase
+        const lowerCaseStatus = status.toLowerCase();
+        
+        // Determine the color based on the status
+        switch (lowerCaseStatus) {
+            case 'paid':
+                return 'green';
+            case 'overdue':
+                return 'red';
+            default:
+                return 'gray';
+        }
+    }
+
+    // Company logo
+    let avatar = '';
+    let fileinput;
+	const onFileSelected =(e)=>{
+        let image = e.target.files[0];
+        let reader = new FileReader();
+        reader.readAsDataURL(image);
+        reader.onload = e => {
+            avatar = e.target.result;
+        };
+    }
 
     // Client Information instance variables
     let clientName = '';
@@ -56,8 +74,15 @@
     // Invoice Items instance variables
     let invoiceItems = [{ description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
     
+    // Notes and TOC strings
+    let notesText = '';
+    let termsAndConditionsText = '';
+
     // errors JSON variable for really, really rudimentary validation
     let errors = {
+        invoiceNumber: false,
+        invoiceStatus: false,
+        avatar: false,
         yourName: false,
         yourStreetAddress: false,
         yourCompany: false,
@@ -67,18 +92,20 @@
         clientStreetAddress: false,
         clientCompany: false,
         clientCityStatePostalCode: false,
-        clientCountry: false, 
+        clientCountry: false,
+        termsAndConditionsText: false
     };
 
     const addItem = () => {
         invoiceItems = [...invoiceItems, { description: '', quantity: 1, price: 0, applyQST: true, applyGST: true }];
     };
 
-    // const removeItem = (index) => {
-    //     invoiceItems.splice(index, 1);
-    // };
-
     const validate = () => {
+        // Validate inputs for basic invoice information
+        errors.invoiceNumber = invoiceNumber.trim() === '';
+        errors.invoiceStatus = invoiceStatus.trim() === '';
+        errors.avatar = avatar.trim() === '';
+
         // Validate inputs for your information
         errors.yourName = yourName.trim() === '';
         errors.yourStreetAddress = yourStreetAddress.trim() === '';
@@ -93,22 +120,22 @@
         errors.clientCityStatePostalCode = clientCityStatePostalCode.trim() === '';
         errors.clientCountry = clientCountry.trim() === '';
 
-        // Validate inputs for notes and terms/conditions
+        // Validate input for terms/conditions
+        errors.termsAndConditionsText = termsAndConditionsText.trim() === '';
 
-    };
-
-    // State variable to hold the selected value
-    let selectedValue = "true";
-
-    const handleValueChange = (value) => {
-        selectedValue = value;
-        console.log(selectedValue);
+        // Validate each item
+        invoiceItems.forEach((item, index) => {
+            errors[`itemDescription${index}`] = item.description.trim() === '';
+            errors[`itemQuantity${index}`] = isNaN(item.quantity) || item.quantity <= 0;
+            
+        });
     };
 
     const generatePDF = async () => {
         // Call the validate() method to ensure inputs are acceptable
         validate();
-        if (!errors.clientName && !errors.clientStreetAddress) {
+        const hasErrors = Object.values(errors).some(error => error);
+        if (!hasErrors) {
             const pdfMake = (await import('pdfmake/build/pdfmake')).default;
             const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
             pdfMake.vfs = pdfFonts.pdfMake.vfs;
@@ -118,12 +145,12 @@
                     {
                         columns: [
                             {
-                                    image: 'data:image/png;base64,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',
-                                    width: 150,
+                                    image: `${avatar}`,
+                                    width: 75,
                             },
                             [
                                 {
-                                    text: 'Invoice',
+                                    text: 'INVOICE',
                                     color: '#333333',
                                     width: '*',
                                     fontSize: 28,
@@ -144,7 +171,7 @@
                                                     alignment: 'right',
                                                 },
                                                 {
-                                                    text: '00001',
+                                                    text: `${invoiceNumber}`,
                                                     bold: true,
                                                     color: '#333333',
                                                     fontSize: 12,
@@ -164,7 +191,7 @@
                                                     alignment: 'right',
                                                 },
                                                 {
-                                                    text: 'June 01, 2016',
+                                                    text: `${df.format(invoiceDateIssued.toDate(getLocalTimeZone()))}`,
                                                     bold: true,
                                                     color: '#333333',
                                                     fontSize: 12,
@@ -184,7 +211,7 @@
                                                     alignment: 'right',
                                                 },
                                                 {
-                                                    text: 'June 01, 2016',
+                                                    text: `${df.format(invoiceDueDate.toDate(getLocalTimeZone()))}`,
                                                     bold: true,
                                                     color: '#333333',
                                                     fontSize: 12,
@@ -204,11 +231,11 @@
                                                     width: '*',
                                                 },
                                                 {
-                                                    text: 'PAID', // var status
+                                                    text: `${invoiceStatus.toUpperCase()}`, // var status
                                                     bold: true,
                                                     fontSize: 14,
                                                     alignment: 'right',
-                                                    color: 'green', // var statusColor
+                                                    color: getInvoiceStatusColor(invoiceStatus), // var statusColor
                                                     width: 100,
                                                 },
                                             ],
@@ -351,7 +378,7 @@
                                         textTransform: 'uppercase',
                                     },
                                     {
-                                        text: 'Price',
+                                        text: 'PRICE',
                                         fillColor: '#eaf2f5',
                                         border: [false, true, false, true],
                                         margin: [0, 5, 0, 5],
@@ -372,7 +399,7 @@
                                         textTransform: 'uppercase',
                                     },
                                     {
-                                        text: 'Total',
+                                        text: 'TOTAL',
                                         border: [false, true, false, true],
                                         alignment: 'right',
                                         fillColor: '#eaf2f5',
@@ -394,7 +421,8 @@
                                         alignment: 'left',
                                     },
                                     {
-                                        text: `$${item.price.toFixed(2)}`,
+                                        //text: `$${item.price.toFixed(2)}`,
+                                        text: `$${item.price}`,
                                         border: [false, false, false, true],
                                         margin: [0, 5, 0, 5],
                                         alignment: 'left',
@@ -559,15 +587,15 @@
                     style: 'notesTitle',
                     },
                     {
-                    text: 'Some notes goes here \n Notes second line',
+                    text: `${notesText ? notesText : "None."}`,
                     style: 'notesText',
                     },
-                        {
-                    text: 'Terms & Conditions ',
+                    {
+                    text: 'TERMS & CONDITIONS',
                     style: 'notesTitle',
                     },
                     {
-                    text: 'Some notes goes here \n Notes second line',
+                    text: `${termsAndConditionsText}`,
                     style: 'notesText',
                     },
                 ],
@@ -604,7 +632,7 @@
 
     <!-- Invoice Generator Page Header -->
     <div class="mx-auto mb-12 max-w-2xl text-center">
-		<h1 class="mb-2 text-sm sm:text-base font-semibold text-green-500">Invoice Generator</h1>
+		<h1 class="mb-2 text-sm sm:text-base font-semibold text-green-500">Canadian Invoice Generator</h1>
 		<p class="mb-6 text-3xl sm:text-5xl font-bold">Create Invoices for Free</p>
 		<p class="text-base sm:text-lg">
 			Your invoice will be saved to your device as a PDF document.
@@ -612,7 +640,7 @@
 	</div>
 
     <!-- Form for Custom Invoice Parameters -->
-    <form class="grid w-full items-start gap-6 overflow-auto p-4 pt-0">
+    <form class="grid w-full items-start gap-6 overflow-auto p-4 pt-0 my-2">
 
         <!-- Document Information and Image Upload -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -622,121 +650,70 @@
 
                 <!-- Invoice Number -->
                 <div class="grid gap-3">
-                    <Label for="your-name">
+                    <Label for="invoice-number">
                         Invoice No.
                         {#if errors.yourName}
-                            <span class="text-xs text-red-500">Your name is required.</span>
+                            <span class="text-xs text-red-500">Invoice number is required.</span>
                         {/if}
                     </Label>
-                    <Input required aria-required type="text" bind:value={yourName} id="your-name" placeholder="Enter Your Full Name" aria-placeholder="Enter Your Full Name" />
+                    <Input required aria-required type="text" bind:value={invoiceNumber} id="invoice-number" placeholder="Enter an Invoice Number" aria-placeholder="Enter an Invoice Number or identifier." />
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
                     <!-- Date Issued -->
                     <div class="grid gap-3">
                         <Label for="date-issued">
-                            Date Issued
+                            Date Issued (YYYY-MM-DD)
                         </Label>
-                        
-                        <Popover.Root openFocus>
-                            <Popover.Trigger asChild let:builder>
-                            <Button
-                                variant="outline"
-                                class={cn(
-                                "w-[240px] justify-start text-left font-normal",
-                                !invoiceDateIssued && "text-muted-foreground"
-                                )}
-                                builders={[builder]}
-                            >
-                                <CalendarIcon class="mr-2 h-4 w-4" />
-                                {invoiceDateIssued ? df.format(invoiceDateIssued.toDate(getLocalTimeZone())) : "Pick a date"}
-                            </Button>
-                            </Popover.Trigger>
-                            <Popover.Content class="flex w-auto flex-col space-y-2 p-2">
-                            <Select.Root
-                                {items}
-                                onSelectedChange={(v) => {
-                                if (!v) return;
-                                invoiceDateIssued = today(getLocalTimeZone()).add({ days: v.value });
-                                }}
-                            >
-                                <Select.Trigger>
-                                <Select.Value placeholder="Select" />
-                                </Select.Trigger>
-                                <Select.Content>
-                                {#each items as item}
-                                    <Select.Item value={item.value}>{item.label}</Select.Item>
-                                {/each}
-                                </Select.Content>
-                            </Select.Root>
-                            <div class="rounded-md border">
-                                <Calendar bind:invoiceDateIssued />
-                            </div>
-                            </Popover.Content>
-                        </Popover.Root>
+                        <Input required aria-required type="date" bind:value={invoiceDateIssued}/>
                     </div>
 
                     <!-- Due Date -->
                     <div class="grid gap-3">
                         <Label for="due-date">
-                            Due Date
+                            Due Date (YYYY-MM-DD)
                         </Label>
-                        
-                        <Popover.Root openFocus>
-                            <Popover.Trigger asChild let:builder>
-                            <Button
-                                variant="outline"
-                                class={cn(
-                                "w-[240px] justify-start text-left font-normal",
-                                !invoiceDueDate && "text-muted-foreground"
-                                )}
-                                builders={[builder]}
-                            >
-                                <CalendarIcon class="mr-2 h-4 w-4" />
-                                {invoiceDueDate ? df.format(invoiceDueDate.toDate(getLocalTimeZone())) : "Pick a date"}
-                            </Button>
-                            </Popover.Trigger>
-                            <Popover.Content class="flex w-auto flex-col space-y-2 p-2">
-                            <Select.Root
-                                {items}
-                                onSelectedChange={(v) => {
-                                if (!v) return;
-                                invoiceDueDate = today(getLocalTimeZone()).add({ days: v.value });
-                                }}
-                            >
-                                <Select.Trigger>
-                                <Select.Value placeholder="Select" />
-                                </Select.Trigger>
-                                <Select.Content>
-                                {#each items as item}
-                                    <Select.Item value={item.value}>{item.label}</Select.Item>
-                                {/each}
-                                </Select.Content>
-                            </Select.Root>
-                            <div class="rounded-md border">
-                                <Calendar bind:invoiceDueDate />
-                            </div>
-                            </Popover.Content>
-                        </Popover.Root>
+                        <Input required aria-required type="date" bind:value={invoiceDueDate}/>
                     </div>
                 </div>
 
                 <!-- Invoice Status -->
                 <div class="grid gap-3">
-                    <Label for="your-city-state-postalcode">
-                        Invoice Status (Optional)
-                        {#if errors.yourCityStatePostalCode}
-                            <span class="text-xs text-red-500">&nbsp; Your city, state, and postal code are required.</span>
+                    <Label for="invoice-status">
+                        Invoice Status
+                        {#if errors.invoiceStatus}
+                            <span class="text-xs text-red-500">Invocie status is required.</span>
                         {/if}
                     </Label>
-                    <Input required aria-required type="text" bind:value={yourCityStatePostalCode} id="your-city-state-postalcode" placeholder="e.g. Paid / Pending / Overdue" aria-placeholder="Enter your Invoice Status (Paid, Pending, Overdue)..." />
+                    <Input required aria-required type="text" bind:value={invoiceStatus} id="invoice-status" placeholder="e.g. Paid / Pending / Overdue" aria-placeholder="Enter your Invoice Status (Paid, Pending, Overdue)..." />
                 </div>
             </fieldset>
 
             <!-- Company Image Upload -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
             <fieldset class="grid gap-6 rounded-lg border p-4 shadow-md bg-card/30">
                 <legend class="-ml-1 px-1 text-sm font-medium"> Your Company&apos;s Logo </legend>
 
+                <div class="flex justify-center items-center flex-col gap-3">
+                    {#if avatar}
+                    <div class="container mx-auto h-[250px] w-[250px] overflow-hidden m-2">
+                        <img class="object-cover w-full h-full" src="{avatar}" alt="Avatar" />
+                    </div>
+                    {:else}
+                    <img class="flex h-[250px] w-[250px] m-2 border-[5px] border-neutral-500" src="https://www.vocaleurope.eu/wp-content/uploads/no-image.jpg" alt="Placeholder" /> 
+                    
+                    {/if}
+                    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+                    <div on:click={()=>{fileinput.click();}} class="flex justify-center items-center flex-col gap-3 cursor-pointer">
+                        <ImageUp class="h-[50px] w-[50px]" />
+                        Upload your Company's Logo
+                    </div>
+                    <input style="display:none" type="file" accept=".jpg, .jpeg, .png" on:change={(e)=>onFileSelected(e)} bind:this={fileinput} >
+                    {#if errors.avatar}
+                        <p class="text-xs text-red-500">Please upload a logo.</p>
+                    {/if}
+                </div>
             </fieldset>
         </div>
 
@@ -761,11 +738,11 @@
                 <div class="grid gap-3">
                     <Label for="your-name">
                         Your Company&apos;s Name
-                        {#if errors.yourName}
-                            <span class="text-xs text-red-500">Your name is required.</span>
+                        {#if errors.yourCompany}
+                            <span class="text-xs text-red-500">Company name is required.</span>
                         {/if}
                     </Label>
-                    <Input required aria-required type="text" bind:value={yourName} id="your-name" placeholder="e.g. Acme Inc." aria-placeholder="Enter Your Full Name" />
+                    <Input required aria-required type="text" bind:value={yourCompany} id="your-name" placeholder="e.g. Acme Inc." aria-placeholder="Enter Your Full Name" />
                 </div>
 
                 <!-- Your Address Line -->
@@ -869,6 +846,10 @@
 
             <p class="inline-block sm:hidden text-xs text-muted-foreground">Swipe Left to Edit Item Details →</p>
 
+            {#if (Object.values(errors).some(error => error))}
+                <p class="text-xs text-red-500">Item details and numerical values are required.</p>
+            {/if}
+
             <!-- Table with rows for Item Description, Quantity, Price, Select QST Option, and Select GST Option -->
             <Table.Root>
                 <Table.Header>
@@ -887,30 +868,33 @@
                             <Input required aria-required type="text" bind:value={item.description} placeholder="Enter Item Description (max. 150 characters)" aria-placeholder="Enter Item Description" maxlength="150" />
                         </Table.Cell>
                         <Table.Cell>
-                        <Label for="stock-1" class="sr-only">Stock</Label>
-                        <Input required aria-required id="stock-1" type="number" value="1" step="1" />
+                            <Label for="stock-{index}" class="sr-only">Stock</Label>
+                            <Input required aria-required id="stock-{index}" type="number" bind:value={item.quantity} step="1" min="0" />
                         </Table.Cell>
                         <Table.Cell>
-                        <Label for="price-1" class="sr-only">Price</Label>
-                        <Input required aria-required id="price-1" type="number" value="0.00" step="0.01" />
+                            <Label for="price-{index}" class="sr-only">Price</Label>
+                            <Input required aria-required id="price-{index}" type="number" bind:value={item.price} step="0.01" min="0" />
                         </Table.Cell>
                         <Table.Cell>
                             <div class="flex items-center justify-center">
-                                <Switch
-                                    bind:checked={item.applyGST}
-                                />
+                                <Switch bind:checked={item.applyGST} />
                             </div>
                         </Table.Cell>
                         <Table.Cell>
                             <div class="flex items-center justify-center">
-                                <Switch
-                                    bind:checked={item.applyQST}
-                                 />
+                                <Switch bind:checked={item.applyQST} />
                             </div>
+                        </Table.Cell>
+                        <Table.Cell class="w-[50px]">
+                            <Button size="sm" variant="ghost" class="gap-1" on:click={() => removeItem(index)}>
+                                <CircleMinus class="h-3.5 w-3.5 text-red-500" />
+                                <span class="text-red-500">Remove</span>
+                            </Button>
                         </Table.Cell>
                     </Table.Row>
                     {/each}
                 </Table.Body>
+                
             </Table.Root>
 
             <Button size="sm" variant="ghost" class="gap-1" on:click={addItem}>
@@ -924,17 +908,28 @@
             <legend class="-ml-1 px-1 text-sm font-medium"> Additional Details </legend>
 
             <!-- Notes Description -->
+            <div class="grid w-full gap-1.5">
+                <Label for="notes">Notes (Optional)</Label>
+                <Textarea placeholder="Type your notes here." id="notes" bind:value={notesText} />
+            </div>
 
             <!-- Terms and Conditions Description -->
-
+            <div class="grid w-full gap-1.5">
+                <Label for="terms-and-conditions">Terms & Conditions</Label>
+                <Textarea placeholder="Type your terms and conditions here." id="terms-and-conditions" bind:value={termsAndConditionsText} />
+                {#if errors.termsAndConditionsText}
+                    <p class="text-xs text-red-500">Terms and conditionsa are required.</p>
+                {/if}
+            </div>
         </fieldset>
-        
     </form>
 
-    <Button on:click={generatePDF}>
-        <FileText class="mr-2 h-4 w-4" />
-        Generate Document
-    </Button>
+    <div class="flex mx-auto items-center justify-center">
+        <Button on:click={generatePDF}>
+            <FileText class="mr-2 h-4 w-4" />
+            <strong>Generate Custom Invoice Document</strong>
+        </Button>
+    </div>
 
     <Toaster  />
 
