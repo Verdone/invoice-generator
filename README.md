@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Invoice Generator is a Svelte-based web application that allows users to create and download invoices as PDF documents without any sort of watermark or advertisement that appears on the final document generated.
+The Invoice Generator is a Svelte-based web application that allows users to create and download invoices as PDF documents without any sort of watermark or advertisement that appears on the final document generated. Specifically, it's made to generate Québec invoices that include items charged with the goods and services tax (GST) and/or the Québec sales tax (QST). For a more internationalized invoice generator, I recommend this one: https://invoicegenerator.io/.
 
 ## Features
 
